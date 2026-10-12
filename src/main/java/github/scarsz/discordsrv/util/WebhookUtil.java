@@ -24,11 +24,12 @@ import github.scarsz.discordsrv.Debug;
 import github.scarsz.discordsrv.DiscordSRV;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.*;
-import net.dv8tion.jda.api.interactions.components.ActionRow;
-import net.dv8tion.jda.api.requests.restaction.MessageAction;
-import net.dv8tion.jda.internal.utils.BufferedRequestBody;
+import net.dv8tion.jda.api.entities.channel.concrete.*;
+import net.dv8tion.jda.api.entities.channel.middleman.*;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.utils.messages.MessageRequest;
 import okhttp3.*;
-import okio.Okio;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
@@ -65,7 +66,7 @@ public class WebhookUtil {
                             continue;
                         }
 
-                        if (DiscordSRV.getPlugin().getDestinationGameChannelNameForTextChannel(webhook.getChannel()) == null) {
+                        if (!(webhook.getChannel() instanceof TextChannel) || DiscordSRV.getPlugin().getDestinationGameChannelNameForTextChannel((TextChannel) webhook.getChannel()) == null) {
                             webhook.delete().reason("DiscordSRV: Purging webhook for unlinked channel").queue();
                         } else if (LEGACY.test(webhook)) {
                             webhook.delete().reason("DiscordSRV: Purging legacy formatted webhook").queue();
@@ -309,7 +310,7 @@ public class WebhookUtil {
                 if (interactions != null) {
                     JSONArray jsonArray = new JSONArray();
                     for (ActionRow actionRow : interactions) {
-                        jsonArray.put(actionRow.toData().toMap());
+                        jsonArray.put(((net.dv8tion.jda.api.utils.data.SerializableData) actionRow).toData().toMap());
                     }
                     jsonObject.put("components", jsonArray);
                 }
@@ -330,7 +331,7 @@ public class WebhookUtil {
                 }
 
                 JSONObject allowedMentions = new JSONObject();
-                Set<String> parse = MessageAction.getDefaultMentions().stream()
+                Set<String> parse = MessageRequest.getDefaultMentions().stream()
                         .filter(Objects::nonNull)
                         .map(Message.MentionType::getParseKey)
                         .collect(Collectors.toSet());
@@ -347,7 +348,7 @@ public class WebhookUtil {
                         String name = attachmentIndex.get(i);
                         InputStream data = attachments.get(name);
                         if (data != null) {
-                            bodyBuilder.addFormDataPart("files[" + i + "]", name, new BufferedRequestBody(Okio.source(data), null));
+                            bodyBuilder.addFormDataPart("files[" + i + "]", name, RequestBody.create(IOUtils.toByteArray(data)));
                             data.close();
                         }
                     }

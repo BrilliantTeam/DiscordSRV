@@ -22,11 +22,12 @@ package github.scarsz.discordsrv.objects;
 
 import dev.vankka.mcdiscordreserializer.renderer.implementation.DefaultMinecraftRenderer;
 import github.scarsz.discordsrv.DiscordSRV;
+import github.scarsz.discordsrv.util.DiscordFormatUtil;
 import github.scarsz.discordsrv.util.DiscordUtil;
 import lombok.NonNull;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
-import net.dv8tion.jda.api.entities.TextChannel;
+import net.dv8tion.jda.api.entities.User;
 import net.kyori.adventure.text.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -42,15 +43,17 @@ public class DiscordSRVMinecraftRenderer extends DefaultMinecraftRenderer {
 
     @Override
     public @Nullable Component appendChannelMention(@NonNull Component component, @NonNull String id) {
-        TextChannel textChannel = DiscordUtil.getTextChannelById(id);
-        if (textChannel != null) component = component.append(Component.text("#" + textChannel.getName()));
+        String name = DiscordFormatUtil.resolveChannelName(id);
+        if (name != null) component = component.append(Component.text("#" + name));
         return component;
     }
 
     @Override
     public @Nullable Component appendUserMention(@NonNull Component component, @NonNull String id) {
         Member member = DiscordUtil.getMemberById(id);
-        if (member != null) component = component.append(Component.text("@" + member.getEffectiveName()));
+        if (member != null) return component.append(Component.text("@" + member.getEffectiveName()));
+        User user = DiscordUtil.getJda() != null ? DiscordUtil.getJda().getUserById(id) : null;
+        if (user != null) component = component.append(Component.text("@" + user.getEffectiveName()));
         return component;
     }
 

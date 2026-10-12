@@ -29,6 +29,8 @@ import me.clip.placeholderapi.PlaceholderAPIPlugin;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.entities.*;
+import net.dv8tion.jda.api.entities.channel.concrete.*;
+import net.dv8tion.jda.api.entities.channel.middleman.*;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.apache.commons.lang3.StringUtils;
@@ -132,9 +134,9 @@ public class PlaceholderAPIExpansion extends PlaceholderExpansion {
                 case "name":
                     return role.getName();
                 case "color_hex":
-                    return getHex(role.getColorRaw());
+                    return getHex(role.getColors().getPrimaryRaw());
                 case "color_code":
-                    final String legacy = MessageUtil.toLegacy(Component.text(0).color(TextColor.color(role.getColorRaw())));
+                    final String legacy = MessageUtil.toLegacy(Component.text(0).color(TextColor.color(role.getColors().getPrimaryRaw())));
                     return legacy.substring(0, legacy.length() - 1);
             }
         }
@@ -189,9 +191,9 @@ public class PlaceholderAPIExpansion extends PlaceholderExpansion {
                 case "user_top_selected_role_name":
                     return topSelectedRole.getName();
                 case "user_top_selected_role_color_hex":
-                    return applyOrEmptyString(topSelectedRole.getColorRaw(), this::getHex);
+                    return applyOrEmptyString(topSelectedRole.getColors().getPrimaryRaw(), this::getHex);
                 case "user_top_selected_role_color_code":
-                    String legacy = MessageUtil.toLegacy(Component.text(0).color(TextColor.color(topSelectedRole.getColorRaw())));
+                    String legacy = MessageUtil.toLegacy(Component.text(0).color(TextColor.color(topSelectedRole.getColors().getPrimaryRaw())));
                     return legacy.substring(0, legacy.length() - 1);
             }
         }
@@ -204,9 +206,9 @@ public class PlaceholderAPIExpansion extends PlaceholderExpansion {
                 case "user_top_role_name":
                     return topRole.getName();
                 case "user_top_role_color_hex":
-                    return applyOrEmptyString(topRole.getColorRaw(), this::getHex);
+                    return applyOrEmptyString(topRole.getColors().getPrimaryRaw(), this::getHex);
                 case "user_top_role_color_code":
-                    String legacy = MessageUtil.toLegacy(Component.text(0).color(TextColor.color(topRole.getColorRaw())));
+                    String legacy = MessageUtil.toLegacy(Component.text(0).color(TextColor.color(topRole.getColors().getPrimaryRaw())));
                     return legacy.substring(0, legacy.length() - 1);
             }
         }

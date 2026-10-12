@@ -107,7 +107,6 @@ public class MessageUtil {
     public static final MinecraftSerializer LIMITED_MINECRAFT_SERIALIZER;
 
     private static BukkitAudiences BUKKIT_AUDIENCES;
-    private static final boolean MC_1_16;
 
     static {
         // add escape + mention + text rules
@@ -122,14 +121,6 @@ public class MessageUtil {
 
         MINECRAFT_SERIALIZER = new MinecraftSerializer(options, escapeOptions);
         LIMITED_MINECRAFT_SERIALIZER = new MinecraftSerializer(options.withRules(rules), escapeOptions);
-
-        boolean available = false;
-        try {
-            Material.valueOf("NETHERITE_PICKAXE").getKey();
-            available = true;
-        } catch (Throwable ignored) {}
-
-        MC_1_16 = available;
     }
 
     private static BukkitAudiences getAudiences() {
@@ -234,11 +225,6 @@ public class MessageUtil {
      * @return the converted legacy message
      */
     public static String toLegacy(Component component) {
-        if (!MC_1_16 && !PluginUtil.checkIfPluginEnabled("ViaVersion")) {
-            // not 1.16 or using ViaVersion, downsample rgb to the 16 colors
-            GsonComponentSerializer serializer = GsonComponentSerializer.colorDownsamplingGson();
-            component = serializer.deserialize(serializer.serialize(component));
-        }
         return LEGACY_SERIALIZER.serialize(component);
     }
 

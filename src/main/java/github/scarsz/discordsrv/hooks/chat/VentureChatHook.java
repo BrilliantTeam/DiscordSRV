@@ -33,8 +33,12 @@ import mineverse.Aust1n46.chat.channel.ChatChannel;
 import mineverse.Aust1n46.chat.utilities.Format;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.MessageEmbed;
-import net.dv8tion.jda.api.entities.TextChannel;
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
+import net.kyori.adventure.text.TextReplacementConfig;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 import org.apache.commons.lang3.StringUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -47,6 +51,7 @@ import org.bukkit.plugin.Plugin;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class VentureChatHook implements ChatHook {
@@ -233,15 +238,17 @@ public class VentureChatHook implements ChatHook {
             }
         }
 
-        String message = LangUtil.Message.CHAT_CHANNEL_MESSAGE.toString()
+        String format = LangUtil.Message.CHAT_CHANNEL_MESSAGE.toString()
                 .replace("%channelname%", chatChannel.getName())
                 .replace("%channelnickname%", chatChannel.getAlias())
-                .replace("%message%", legacy)
                 .replace("%channelcolor%", MessageUtil.translateLegacy(channelColor != null ? channelColor : ""));
+        String message = format.replace("%message%", legacy);
+        Component formatted = MessageUtil.toComponent(format, true).replaceText(TextReplacementConfig.builder()
+                .matchLiteral("%message%").once().replacement(component).build());
 
         if (DiscordSRV.config().getBoolean("VentureChatBungee") && chatChannel.getBungee()) {
-            if (chatChannel.isFiltered()) message = Format.FilterChat(message);
-            String translatedMessage = MessageUtil.toLegacy(MessageUtil.toComponent(message));
+            String translatedMessage = MessageUtil.toLegacy(inlineLinkTargets(formatted));
+            if (chatChannel.isFiltered()) translatedMessage = Format.FilterChat(translatedMessage);
             MineverseChat.sendDiscordSRVPluginMessage(chatChannel.getName(), translatedMessage);
             DiscordSRV.debug(Debug.DISCORD_TO_MINECRAFT, "Sent a message to VentureChat via BungeeCord (channel: " + chatChannel.getName() + ")");
         } else {
@@ -250,11 +257,13 @@ public class VentureChatHook implements ChatHook {
                     .filter(p -> !chatChannel.hasPermission() || p.getPlayer().hasPermission(chatChannel.getPermission()))
                     .collect(Collectors.toList());
             for (MineverseChatPlayer player : playersToNotify) {
-                String playerMessage = (player.hasFilter() && chatChannel.isFiltered()) ? Format.FilterChat(message) : message;
+                boolean filter = player.hasFilter() && chatChannel.isFiltered();
+                String playerMessage = filter ? Format.FilterChat(message) : message;
+                Component playerComponent = filter
+                        ? formatted.replaceText(TextReplacementConfig.builder().match(ANY_TEXT).replacement((match, builder) -> builder.content(Format.FilterChat(match.group()))).build())
+                        : formatted;
 
-                // escape quotes, https://github.com/DiscordSRV/DiscordSRV/issues/754
-                playerMessage = playerMessage.replace("\"", "\\\"");
-                String json = Format.convertPlainTextToJson(playerMessage, true);
+                String json = "[\"\"," + GsonComponentSerializer.gson().serialize(playerComponent) + "]";
                 int hash = (playerMessage.replaceAll("(§([a-z0-9]))", "")).hashCode();
                 String finalJSON = Format.formatModerationGUI(json, player.getPlayer(), "Discord", chatChannel.getName(), hash);
                 PacketContainer packet = Format.createPacketPlayOutChat(finalJSON);
@@ -269,6 +278,17 @@ public class VentureChatHook implements ChatHook {
                     message
             );
         }
+    }
+
+    private static final Pattern ANY_TEXT = Pattern.compile("[\\s\\S]+");
+
+    private static Component inlineLinkTargets(Component component) {
+        ClickEvent click = component.clickEvent();
+        if (component instanceof TextComponent && click != null && click.action() == ClickEvent.Action.OPEN_URL
+                && !((TextComponent) component).content().equals(click.value())) {
+            component = ((TextComponent) component).content(((TextComponent) component).content() + " (" + click.value() + ")");
+        }
+        return component.children(component.children().stream().map(VentureChatHook::inlineLinkTargets).collect(Collectors.toList()));
     }
 
     @Override

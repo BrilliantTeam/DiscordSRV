@@ -25,6 +25,8 @@ import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.objects.ExpiringDualHashBidiMap;
 import github.scarsz.discordsrv.util.*;
 import net.dv8tion.jda.api.entities.*;
+import net.dv8tion.jda.api.entities.channel.concrete.*;
+import net.dv8tion.jda.api.entities.channel.middleman.*;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberJoinEvent;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberRemoveEvent;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberRoleAddEvent;
@@ -223,7 +225,7 @@ public class GroupSynchronizationManager extends ListenerAdapter implements List
 
             Member member;
             try {
-                member = guild.retrieveMember(user, false).complete();
+                member = guild.retrieveMember(user).useCache(false).complete();
             } catch (ErrorResponseException e) {
                 if (e.getErrorResponse() == ErrorResponse.UNKNOWN_MEMBER) {
                     membersNotInGuild.add(user.getId());

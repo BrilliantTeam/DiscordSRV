@@ -25,15 +25,19 @@ import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.api.events.DiscordGuildMessageSentEvent;
 import github.scarsz.discordsrv.api.events.DiscordPrivateMessageSentEvent;
 import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.MessageBuilder;
+import net.dv8tion.jda.api.entities.emoji.RichCustomEmoji;
+import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.*;
+import net.dv8tion.jda.api.entities.channel.ChannelType;
+import net.dv8tion.jda.api.entities.channel.concrete.*;
+import net.dv8tion.jda.api.entities.channel.middleman.*;
 import net.dv8tion.jda.api.events.guild.member.update.GuildMemberUpdateNicknameEvent;
 import net.dv8tion.jda.api.events.role.update.RoleUpdateNameEvent;
 import net.dv8tion.jda.api.events.user.update.UserUpdateNameEvent;
 import net.dv8tion.jda.api.exceptions.PermissionException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.requests.restaction.MessageAction;
+import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.apache.commons.lang3.StringUtils;
@@ -80,14 +84,14 @@ public class DiscordUtil {
      * @return The top hierarchical Role with a custom color
      */
     public static Role getTopRoleWithCustomColor(Member member) {
-        for (Role role : member.getRoles()) if (role.getColor() != null) return role;
+        for (Role role : member.getRoles()) if (role.getColors().getPrimary() != null) return role;
         return null;
     }
 
     private static final Pattern USER_MENTION_PATTERN = Pattern.compile("(<@!?([0-9]{16,20})>)");
     private static final Pattern CHANNEL_MENTION_PATTERN = Pattern.compile("(<#([0-9]{16,20})>)");
     private static final Pattern ROLE_MENTION_PATTERN = Pattern.compile("(<@&([0-9]{16,20})>)");
-    private static final Pattern EMOTE_MENTION_PATTERN = Pattern.compile("(<a?:([a-zA-Z]{2,32}):[0-9]{16,20}>)");
+    private static final Pattern EMOTE_MENTION_PATTERN = Pattern.compile("(<a?:(\\w{2,32}):[0-9]{16,20}>)");
 
     /**
      * Converts Discord-compatible &lt;@12345742934270> mentions to human readable @mentions
@@ -100,15 +104,15 @@ public class DiscordUtil {
             String mention = userMatcher.group(1);
             String userId = userMatcher.group(2);
             User user = getUserById(userId);
-            message = message.replace(mention, user != null ? "@" + user.getName() : mention);
+            message = message.replace(mention, user != null ? "@" + user.getEffectiveName() : mention);
         }
 
         Matcher channelMatcher = CHANNEL_MENTION_PATTERN.matcher(message);
         while (channelMatcher.find()) {
             String mention = channelMatcher.group(1);
             String channelId = channelMatcher.group(2);
-            TextChannel channel = getTextChannelById(channelId);
-            message = message.replace(mention, channel != null ? "#" + channel.getName() : mention);
+            String name = DiscordFormatUtil.resolveChannelName(channelId);
+            message = message.replace(mention, name != null ? "#" + name : mention);
         }
 
         Matcher roleMatcher = ROLE_MENTION_PATTERN.matcher(message);
@@ -159,6 +163,18 @@ public class DiscordUtil {
                     )
             );
             patterns.put(pattern, member.getAsMention());
+
+            if (!member.getUser().getName().equalsIgnoreCase(member.getEffectiveName())) {
+                Pattern usernamePattern = mentionPatternCache.computeIfAbsent(
+                        "username:" + member.getId(),
+                        mentionable -> Pattern.compile(
+                                "(?<!<)" +
+                                Pattern.quote("@" + member.getUser().getName()) + "(?![\\w.])",
+                                Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+                        )
+                );
+                patterns.put(usernamePattern, member.getAsMention());
+            }
         }
 
         for (Map.Entry<Pattern, String> entry : patterns.entrySet()) {
@@ -175,6 +191,7 @@ public class DiscordUtil {
                 @Override
                 public void onUserUpdateName(UserUpdateNameEvent event) {
                     mentionPatternCache.remove(event.getUser().getId());
+                    mentionPatternCache.remove("username:" + event.getUser().getId());
                 }
                 @Override
                 public void onGuildMemberUpdateNickname(GuildMemberUpdateNicknameEvent event) {
@@ -347,7 +364,7 @@ public class DiscordUtil {
 
         message = translateEmotes(message, channel.getGuild());
 
-        return sendMessageBlocking(channel, new MessageBuilder().append(message).build(), allowMassPing);
+        return sendMessageBlocking(channel, MessageCreateData.fromContent(message), allowMassPing);
     }
     /**
      * Send the given message to the given channel, blocking the thread's execution until it's successfully sent then returning it
@@ -357,6 +374,9 @@ public class DiscordUtil {
      * @return The sent message
      */
     public static Message sendMessageBlocking(TextChannel channel, Message message, boolean allowMassPing) {
+        return sendMessageBlocking(channel, message == null ? null : MessageCreateData.fromMessage(message), allowMassPing);
+    }
+    public static Message sendMessageBlocking(TextChannel channel, MessageCreateData message, boolean allowMassPing) {
         if (getJda() == null) {
             DiscordSRV.debug("Tried sending a message when JDA was null");
             return null;
@@ -367,15 +387,15 @@ public class DiscordUtil {
             return null;
         }
 
-        if (message == null || StringUtils.isBlank(message.getContentRaw())) {
+        if (message == null || StringUtils.isBlank(message.getContent())) {
             DiscordSRV.debug("Tried sending a null or blank message");
             return null;
         }
 
         Message sentMessage;
         try {
-            MessageAction action = channel.sendMessage(message);
-            if (allowMassPing) action = action.allowedMentions(EnumSet.allOf(Message.MentionType.class));
+            MessageCreateAction action = channel.sendMessage(message);
+            if (allowMassPing) action = action.setAllowedMentions(EnumSet.allOf(Message.MentionType.class));
             sentMessage = action.complete();
         } catch (PermissionException e) {
             if (e.getPermission() != Permission.UNKNOWN) {
@@ -403,7 +423,7 @@ public class DiscordUtil {
 
         message = translateEmotes(message, channel.getGuild());
         if (StringUtils.isBlank(message)) return;
-        queueMessage(channel, new MessageBuilder().append(message).build(), false);
+        queueMessage(channel, MessageCreateData.fromContent(message), false);
     }
     /**
      * Send the given message to the given channel
@@ -419,7 +439,7 @@ public class DiscordUtil {
 
         message = translateEmotes(message, channel.getGuild());
         if (StringUtils.isBlank(message)) return;
-        queueMessage(channel, new MessageBuilder().append(message).build(), allowMassPing);
+        queueMessage(channel, MessageCreateData.fromContent(message), allowMassPing);
     }
     /**
      * Send the given message to the given channel
@@ -429,6 +449,9 @@ public class DiscordUtil {
     public static void queueMessage(TextChannel channel, Message message) {
         queueMessage(channel, message, null);
     }
+    public static void queueMessage(TextChannel channel, MessageCreateData message) {
+        queueMessage(channel, message, null, false);
+    }
     /**
      * Send the given message to the given channel
      * @param channel The channel to send the message to
@@ -436,6 +459,9 @@ public class DiscordUtil {
      * @param allowMassPing Whether to deny @everyone/@here pings
      */
     public static void queueMessage(TextChannel channel, Message message, boolean allowMassPing) {
+        queueMessage(channel, message, null, allowMassPing);
+    }
+    public static void queueMessage(TextChannel channel, MessageCreateData message, boolean allowMassPing) {
         queueMessage(channel, message, null, allowMassPing);
     }
     /**
@@ -447,7 +473,7 @@ public class DiscordUtil {
     public static void queueMessage(TextChannel channel, String message, Consumer<Message> consumer) {
         message = translateEmotes(message, channel.getGuild());
         if (StringUtils.isBlank(message)) return;
-        queueMessage(channel, new MessageBuilder().append(message).build(), consumer);
+        queueMessage(channel, MessageCreateData.fromContent(message), consumer);
     }
     /**
      * Send the given message to the given channel, optionally doing something with the message via the given consumer
@@ -458,7 +484,7 @@ public class DiscordUtil {
      */
     public static void queueMessage(TextChannel channel, String message, Consumer<Message> consumer, boolean allowMassPing) {
         message = translateEmotes(message, channel.getGuild());
-        queueMessage(channel, new MessageBuilder().append(message).build(), consumer, allowMassPing);
+        queueMessage(channel, MessageCreateData.fromContent(message), consumer, allowMassPing);
     }
     /**
      * Send the given message to the given channel, optionally doing something with the message via the given consumer
@@ -469,6 +495,9 @@ public class DiscordUtil {
     public static void queueMessage(TextChannel channel, Message message, Consumer<Message> consumer) {
         queueMessage(channel, message, consumer, false);
     }
+    public static void queueMessage(TextChannel channel, MessageCreateData message, Consumer<Message> consumer) {
+        queueMessage(channel, message, consumer, false);
+    }
     /**
      * Send the given message to the given channel, optionally doing something with the message via the given consumer
      * @param channel The channel to send the message to
@@ -476,14 +505,17 @@ public class DiscordUtil {
      * @param consumer The consumer to handle the message
      */
     public static void queueMessage(TextChannel channel, Message message, Consumer<Message> consumer, boolean allowMassPing) {
+        queueMessage(channel, MessageCreateData.fromMessage(message), consumer, allowMassPing);
+    }
+    public static void queueMessage(TextChannel channel, MessageCreateData message, Consumer<Message> consumer, boolean allowMassPing) {
         if (channel == null) {
             DiscordSRV.debug("Tried sending a message to a null channel");
             return;
         }
 
         try {
-            MessageAction action = channel.sendMessage(message);
-            if (allowMassPing) action = action.allowedMentions(EnumSet.allOf(Message.MentionType.class));
+            MessageCreateAction action = channel.sendMessage(message);
+            if (allowMassPing) action = action.setAllowedMentions(EnumSet.allOf(Message.MentionType.class));
             action.queue(sentMessage -> {
                 DiscordSRV.api.callEvent(new DiscordGuildMessageSentEvent(getJda(), sentMessage));
                 if (consumer != null) consumer.accept(sentMessage);
@@ -582,9 +614,9 @@ public class DiscordUtil {
             message.delete().queue();
         } catch (PermissionException e) {
             if (e.getPermission() != Permission.UNKNOWN) {
-                DiscordSRV.warning("Could not delete message in channel " + message.getTextChannel() + " because the bot does not have the \"" + e.getPermission().getName() + "\" permission");
+                DiscordSRV.warning("Could not delete message in channel " + message.getChannel() + " because the bot does not have the \"" + e.getPermission().getName() + "\" permission");
             } else {
-                DiscordSRV.warning("Could not delete message in channel " + message.getTextChannel() + " because \"" + e.getMessage() + "\"");
+                DiscordSRV.warning("Could not delete message in channel " + message.getChannel() + " because \"" + e.getMessage() + "\"");
             }
         }
     }
@@ -638,7 +670,7 @@ public class DiscordUtil {
             return "";
         }
 
-        return MessageUtil.toLegacy(Component.empty().color(TextColor.color(role.getColorRaw())));
+        return MessageUtil.toLegacy(Component.empty().color(TextColor.color(role.getColors().getPrimaryRaw())));
     }
 
     /**
@@ -812,7 +844,7 @@ public class DiscordUtil {
         daysOfMessagesToDelete = Math.abs(daysOfMessagesToDelete);
 
         try {
-            member.ban(daysOfMessagesToDelete).queue();
+            member.ban(daysOfMessagesToDelete, java.util.concurrent.TimeUnit.DAYS).queue();
         } catch (PermissionException e) {
             if (e.getPermission() != Permission.UNKNOWN) {
                 DiscordSRV.warning("Failed to ban " + member + " because the bot does not have the \"" + e.getPermission().getName() + "\" permission");
@@ -831,13 +863,13 @@ public class DiscordUtil {
     }
 
     public static String translateEmotes(String messageToTranslate) {
-        return translateEmotes(messageToTranslate, getJda().getEmotes());
+        return translateEmotes(messageToTranslate, getJda().getEmojis());
     }
     public static String translateEmotes(String messageToTranslate, Guild guild) {
-        return translateEmotes(messageToTranslate, guild.getEmotes());
+        return translateEmotes(messageToTranslate, guild.getEmojis());
     }
-    public static String translateEmotes(String messageToTranslate, List<Emote> emotes) {
-        for (Emote emote : emotes)
+    public static String translateEmotes(String messageToTranslate, List<RichCustomEmoji> emotes) {
+        for (RichCustomEmoji emote : emotes)
             messageToTranslate = messageToTranslate.replace(":" + emote.getName() + ":", emote.getAsMention());
         return messageToTranslate;
     }

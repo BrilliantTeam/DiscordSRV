@@ -25,6 +25,7 @@ import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.hooks.PluginHook;
 import github.scarsz.discordsrv.hooks.vanish.VanishHook;
 import net.dv8tion.jda.api.entities.User;
+import com.destroystokyo.paper.profile.ProfileProperty;
 import org.apache.commons.lang3.StringUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
@@ -35,10 +36,27 @@ import org.bukkit.entity.Player;
 
 import java.lang.reflect.Method;
 import java.util.*;
+import java.nio.charset.StandardCharsets;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class PlayerUtil {
+
+    private static final Pattern TEXTURE_URL_PATTERN = Pattern.compile("https?://.+?(?<texture>\\w{60,64})\"");
+
+    /**
+     * @return the hash of the player's skin texture, or null if the player has no textures property
+     */
+    public static String getTexture(Player player) {
+        for (ProfileProperty property : player.getPlayerProfile().getProperties()) {
+            if (!property.getName().equals("textures")) continue;
+            Matcher matcher = TEXTURE_URL_PATTERN.matcher(new String(Base64.getDecoder().decode(property.getValue()), StandardCharsets.UTF_8));
+            if (matcher.find()) return matcher.group("texture");
+        }
+        return null;
+    }
 
     public static List<Player> getOnlinePlayers() {
         return getOnlinePlayers(false);
@@ -50,20 +68,7 @@ public class PlayerUtil {
      * @return {@code ArrayList} containing online players
      */
     public static List<Player> getOnlinePlayers(boolean filterVanishedPlayers) {
-        List<Player> onlinePlayers = new ArrayList<>();
-
-        try {
-            Method onlinePlayerMethod = Server.class.getMethod("getOnlinePlayers");
-            if (onlinePlayerMethod.getReturnType().equals(Collection.class)) {
-                for (Object o : ((Collection<?>) onlinePlayerMethod.invoke(Bukkit.getServer()))) {
-                    onlinePlayers.add((Player) o);
-                }
-            } else {
-                Collections.addAll(onlinePlayers, ((Player[]) onlinePlayerMethod.invoke(Bukkit.getServer())));
-            }
-        } catch (Exception e) {
-            DiscordSRV.error(e);
-        }
+        List<Player> onlinePlayers = new ArrayList<>(Bukkit.getOnlinePlayers());
 
         if (!filterVanishedPlayers) {
             return onlinePlayers;

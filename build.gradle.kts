@@ -16,7 +16,7 @@ plugins {
 group = "com.discordsrv"
 val minecraftVersion = project.properties["minecraftVersion"]!!.toString()
 val paperApiVersion = project.properties["paperVersion"]!!.toString()
-val targetJavaVersion = 1.8
+val targetJavaVersion = 25
 
 java {
     val javaVersion = JavaVersion.toVersion(targetJavaVersion)
@@ -106,7 +106,7 @@ tasks {
         mustRunAfter("build")
         minimize {
             exclude(dependency("github.scarsz:configuralize:.*"))
-            exclude(dependency("me.scarsz.jdaappender:jda4:.*"))
+            exclude(dependency("me.scarsz.jdaappender:jda5:.*"))
             exclude(dependency("com.fasterxml.jackson.core:jackson-databind:.*"))
         }
 
@@ -124,6 +124,7 @@ tasks {
         relocate("org.minidns", "github.scarsz.discordsrv.dependencies.minidns")
         relocate("okhttp3", "github.scarsz.discordsrv.dependencies.okhttp3")
         relocate("okio", "github.scarsz.discordsrv.dependencies.okio")
+        relocate("kotlin", "github.scarsz.discordsrv.dependencies.kotlin")
         relocate("gnu.trove", "github.scarsz.discordsrv.dependencies.trove")
         relocate("com.fasterxml.jackson", "github.scarsz.discordsrv.dependencies.jackson")
         relocate("com.google.common", "github.scarsz.discordsrv.dependencies.google.common")
@@ -183,7 +184,6 @@ repositories {
     maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://central.sonatype.com/repository/maven-snapshots/")
-    maven("https://oss.sonatype.org/content/repositories/snapshots")
     maven("https://nexus.scarsz.me/content/groups/public/")
     // Multiverse-Core v5
     maven("https://repo.onarandombox.com/content/groups/public/")
@@ -196,9 +196,14 @@ dependencies {
     }
 
     // JDA
-    api("net.dv8tion:JDA:4.4.1_DiscordSRV.fix-7") {
+    api("net.dv8tion:JDA:6.7.0") {
         exclude(module = "opus-java") // we don't use voice features
+        exclude(module = "tink")
     }
+
+    compileOnly("org.ow2.asm:asm:9.9.1")
+    compileOnly("org.ow2.asm:asm-commons:9.9.1")
+    compileOnly("org.ow2.asm:asm-tree:9.9.1")
 
     // Config
     api("github.scarsz:configuralize:1.3.2") {
@@ -208,9 +213,9 @@ dependencies {
     }
 
     // Logging
-    implementation("me.scarsz.jdaappender:jda4:1.2.3")
-    implementation("org.slf4j:slf4j-jdk14:1.7.36")
-    implementation("org.slf4j:jcl-over-slf4j:1.7.36")
+    implementation("me.scarsz.jdaappender:jda5:1.2.3")
+    implementation("org.slf4j:slf4j-jdk14:2.0.17")
+    implementation("org.slf4j:jcl-over-slf4j:2.0.17")
     // MC <  1.12 = 2.0-beta9
     // MC >= 1.12 = 2.1
     // Log4J is NOT included in DiscordSRV and is only used for compilation.
@@ -231,8 +236,8 @@ dependencies {
     compileOnlyApi("org.jetbrains:annotations:23.0.0")
 
     // Lombok
-    compileOnly("org.projectlombok:lombok:1.18.38")
-    annotationProcessor("org.projectlombok:lombok:1.18.38")
+    compileOnly("org.projectlombok:lombok:1.18.44")
+    annotationProcessor("org.projectlombok:lombok:1.18.44")
 
     // Apache Commons, guava
     implementation("commons-io:commons-io:2.11.0")
@@ -292,7 +297,7 @@ dependencies {
     compileOnly("org.dynmap:dynmap-api:2.0")
     compileOnly("com.gmail.nossr50:mcmmo:1.5.07")
     compileOnly("net.milkbowl.vault:VaultAPI:1.7")
-    compileOnly("me.clip:placeholderapi:2.10.9")
+    compileOnly("me.clip:placeholderapi:2.11.6")
 
     // debug hooks
     compileOnly("ch.njol:skript:2.5")

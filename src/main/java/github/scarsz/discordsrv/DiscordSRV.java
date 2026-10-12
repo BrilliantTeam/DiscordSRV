@@ -32,6 +32,7 @@ import github.scarsz.configuralize.DynamicConfig;
 import github.scarsz.configuralize.Language;
 import github.scarsz.configuralize.ParseException;
 import github.scarsz.discordsrv.api.ApiManager;
+import github.scarsz.discordsrv.compat.Jda4Compat;
 import github.scarsz.discordsrv.api.events.*;
 import github.scarsz.discordsrv.hooks.PluginHook;
 import github.scarsz.discordsrv.hooks.VaultHook;
@@ -61,22 +62,27 @@ import me.scarsz.jdaappender.LogItem;
 import me.scarsz.jdaappender.LogLevel;
 import net.dv8tion.jda.api.*;
 import net.dv8tion.jda.api.entities.*;
-import net.dv8tion.jda.api.events.ShutdownEvent;
+import net.dv8tion.jda.api.entities.channel.concrete.*;
+import net.dv8tion.jda.api.entities.channel.middleman.*;
+import net.dv8tion.jda.api.events.session.ShutdownEvent;
 import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.dv8tion.jda.api.exceptions.HierarchyException;
+import net.dv8tion.jda.api.exceptions.InvalidTokenException;
 import net.dv8tion.jda.api.exceptions.PermissionException;
 import net.dv8tion.jda.api.exceptions.RateLimitedException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.CloseCode;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.requests.RestAction;
-import net.dv8tion.jda.api.requests.restaction.MessageAction;
+import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
+import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
+import net.dv8tion.jda.api.utils.messages.MessageCreateData;
+import net.dv8tion.jda.api.utils.messages.MessageRequest;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextReplacementConfig;
 import okhttp3.*;
-import okhttp3.internal.Util;
 import okhttp3.internal.tls.OkHostnameVerifier;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FileUtils;
@@ -115,7 +121,6 @@ import org.minidns.dnsmessage.DnsMessage;
 import org.minidns.record.Record;
 
 import javax.net.ssl.SSLContext;
-import javax.security.auth.login.LoginException;
 import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -203,6 +208,7 @@ public class DiscordSRV extends JavaPlugin {
     // JDA & JDA related
     @Getter private JDA jda = null;
     private ExecutorService callbackThreadPool;
+    private OkHttpClient httpClient;
     @Getter private ChannelLoggingHandler consoleAppender;
     private JdaFilter jdaFilter;
 
@@ -222,16 +228,16 @@ public class DiscordSRV extends JavaPlugin {
 
     public void reloadAllowedMentions() {
         // set default mention types to never ping everyone/here
-        MessageAction.setDefaultMentions(config().getStringList("DiscordChatChannelAllowedMentions").stream()
+        MessageRequest.setDefaultMentions(config().getStringList("DiscordChatChannelAllowedMentions").stream()
                 .map(s -> {
                     try {
-                        return Message.MentionType.valueOf(s.toUpperCase());
+                        return Message.MentionType.valueOf(s.equalsIgnoreCase("emote") ? "EMOJI" : s.toUpperCase());
                     } catch (IllegalArgumentException e) {
                         DiscordSRV.error("Unknown mention type \"" + s + "\" defined in DiscordChatChannelAllowedMentions");
                         return null;
                     }
                 }).filter(Objects::nonNull).collect(Collectors.toSet()));
-        DiscordSRV.debug("Allowed chat mention types: " + MessageAction.getDefaultMentions().stream().map(Enum::name).collect(Collectors.joining(", ")));
+        DiscordSRV.debug("Allowed chat mention types: " + MessageRequest.getDefaultMentions().stream().map(Enum::name).collect(Collectors.joining(", ")));
     }
 
     public void reloadChannels() {
@@ -399,6 +405,7 @@ public class DiscordSRV extends JavaPlugin {
 
     public DiscordSRV() {
         super();
+        Jda4Compat.install(getLogger());
 
         // load config
         getDataFolder().mkdirs();
@@ -523,19 +530,6 @@ public class DiscordSRV extends JavaPlugin {
                     ignoredPlugins.add("DiscordSRV");
                 }
             } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException ignored) {}
-        }
-
-        // check if the person is trying to use the plugin without updating to ASM 5
-        try {
-            File specialSourceFile = new File("libraries/net/md-5/SpecialSource/1.7-SNAPSHOT/SpecialSource-1.7-SNAPSHOT.jar");
-            if (!specialSourceFile.exists()) specialSourceFile = new File("bin/net/md-5/SpecialSource/1.7-SNAPSHOT/SpecialSource-1.7-SNAPSHOT.jar");
-            if (specialSourceFile.exists() && DigestUtils.md5Hex(FileUtils.readFileToByteArray(specialSourceFile)).equalsIgnoreCase("096777a1b6098130d6c925f1c04050a3")) {
-                DiscordSRV.warning(LangUtil.InternalMessage.ASM_WARNING.toString()
-                        .replace("{specialsourcefolder}", specialSourceFile.getParentFile().getPath())
-                );
-            }
-        } catch (IOException e) {
-            error(e);
         }
 
         requireLinkModule = new RequireLinkModule();
@@ -664,7 +658,7 @@ public class DiscordSRV extends JavaPlugin {
                 private List<InetAddress> lookupPublic(String host) throws UnknownHostException {
                     for (InetAddress dnsServer : fallbackDnsServers) {
                         try {
-                            DnsMessage query = client.query(host, Record.TYPE.A, Record.CLASS.IN, dnsServer).response;
+                            DnsMessage query = client.query(host, org.minidns.record.Record.TYPE.A, org.minidns.record.Record.CLASS.IN, dnsServer).response;
                             if (query.responseCode != DnsMessage.RESPONSE_CODE.NO_ERROR) {
                                 DiscordSRV.error("DNS server " + dnsServer.getHostAddress() + " failed our DNS query for " + host + ": " + query.responseCode.name());
                             }
@@ -720,7 +714,7 @@ public class DiscordSRV extends JavaPlugin {
         Dispatcher dispatcher = new Dispatcher(
                 new ThreadPoolExecutor(
                         2, 20, 5, TimeUnit.SECONDS,
-                        new SynchronousQueue<>(), Util.threadFactory("OkHttp Dispatcher", false))
+                        new SynchronousQueue<>(), new ThreadFactoryBuilder().setNameFormat("OkHttp Dispatcher").setDaemon(false).build())
         );
         dispatcher.setMaxRequests(20);
         dispatcher.setMaxRequestsPerHost(20); // most requests are to discord.com
@@ -774,7 +768,7 @@ public class DiscordSRV extends JavaPlugin {
             }
         }
 
-        OkHttpClient httpClient = httpClientBuilder.build();
+        httpClient = httpClientBuilder.build();
 
         // set custom RestAction failure handler
         Consumer<? super Throwable> defaultFailure = RestAction.getDefaultFailure();
@@ -887,7 +881,7 @@ public class DiscordSRV extends JavaPlugin {
                     .setMemberCachePolicy(MemberCachePolicy.ALL)
                     .setCallbackPool(callbackThreadPool, false)
                     .setGatewayPool(gatewayThreadPool, true)
-                    .setRateLimitPool(rateLimitThreadPool, true)
+                    .setRateLimitScheduler(rateLimitThreadPool, true)
                     .setWebsocketFactory(websocketFactory)
                     .setHttpClient(httpClient)
                     .setAutoReconnect(true)
@@ -906,20 +900,16 @@ public class DiscordSRV extends JavaPlugin {
             jda.awaitReady(); // let JDA be assigned as soon as we can, but wait until it's ready
 
             for (Guild guild : jda.getGuilds()) {
-                guild.retrieveOwner(true).queue();
+                guild.retrieveOwner().queue();
                 guild.loadMembers()
                         .onSuccess(members -> DiscordSRV.debug("Loaded " + members.size() + " members in guild " + guild))
                         .onError(throwable -> DiscordSRV.error("Failed to retrieve members of guild " + guild, throwable))
                         .get(); // block DiscordSRV startup until members are loaded
             }
-        } catch (LoginException e) {
+        } catch (InvalidTokenException e) {
             disablePlugin();
-            if (e.getMessage().toLowerCase().contains("the provided token is invalid")) {
-                invalidBotToken = true;
-                DiscordDisconnectListener.printDisconnectMessage(true, "The bot token is invalid");
-            } else {
-                DiscordDisconnectListener.printDisconnectMessage(true, e.getMessage());
-            }
+            invalidBotToken = true;
+            DiscordDisconnectListener.printDisconnectMessage(true, "The bot token is invalid");
             return;
         } catch (Exception e) {
             if (e instanceof IllegalStateException && e.getMessage().equals("Was shutdown trying to await status")) {
@@ -969,7 +959,7 @@ public class DiscordSRV extends JavaPlugin {
 
                 consoleAppender = new ChannelLoggingHandler(() -> {
                     TextChannel textChannel = DiscordSRV.getPlugin().getConsoleChannel();
-                    return textChannel != null && textChannel.getGuild().getSelfMember().hasPermission(textChannel, Permission.MESSAGE_READ, Permission.MESSAGE_WRITE) ? textChannel : null;
+                    return textChannel != null && textChannel.getGuild().getSelfMember().hasPermission(textChannel, Permission.VIEW_CHANNEL, Permission.MESSAGE_SEND) ? textChannel : null;
                 }, config -> {
                     config.setUseCodeBlocks(config().getBooleanElse("DiscordConsoleChannelUseCodeBlocks", true));
                     config.setLoggerNamePadding(config().getIntElse("DiscordConsoleChannelPadding", 0));
@@ -1099,12 +1089,7 @@ public class DiscordSRV extends JavaPlugin {
         new PlayerBanListener();
         new PlayerDeathListener();
         new PlayerJoinLeaveListener();
-        try {
-            Class.forName("org.bukkit.event.player.PlayerAdvancementDoneEvent");
-            new PlayerAdvancementDoneListener();
-        } catch (Exception ignored) {
-            new PlayerAchievementsListener();
-        }
+        new PlayerAdvancementDoneListener();
 
         // register incompatible client manager
 //        Bukkit.getPluginManager().registerEvents(incompatibleClientManager, this);
@@ -1567,6 +1552,13 @@ public class DiscordSRV extends JavaPlugin {
             error(e);
         }
         executor.shutdownNow();
+        Jda4Compat.close();
+
+        if (httpClient != null) {
+            httpClient.dispatcher().executorService().shutdownNow();
+            httpClient.connectionPool().evictAll();
+            httpClient = null;
+        }
     }
 
     @Override
@@ -1973,7 +1965,7 @@ public class DiscordSRV extends JavaPlugin {
             return content;
         };
 
-        Message discordMessage = translateMessage(messageFormat, translator);
+        MessageCreateData discordMessage = translateMessage(messageFormat, translator);
         if (discordMessage == null) return;
 
         String webhookName = translator.apply(messageFormat.getWebhookName(), false);
@@ -1981,7 +1973,7 @@ public class DiscordSRV extends JavaPlugin {
 
         if (messageFormat.isUseWebhooks()) {
             WebhookUtil.deliverMessage(textChannel, webhookName, webhookAvatarUrl,
-                    discordMessage.getContentRaw(), discordMessage.getEmbeds().stream().findFirst().orElse(null));
+                    discordMessage.getContent(), discordMessage.getEmbeds().stream().findFirst().orElse(null));
         } else {
             DiscordUtil.queueMessage(textChannel, discordMessage, true);
         }
@@ -2034,7 +2026,7 @@ public class DiscordSRV extends JavaPlugin {
             return content;
         };
 
-        Message discordMessage = translateMessage(messageFormat, translator);
+        MessageCreateData discordMessage = translateMessage(messageFormat, translator);
         if (discordMessage == null) return;
 
         String webhookName = translator.apply(messageFormat.getWebhookName(), false);
@@ -2042,7 +2034,7 @@ public class DiscordSRV extends JavaPlugin {
 
         if (messageFormat.isUseWebhooks()) {
             WebhookUtil.deliverMessage(textChannel, webhookName, webhookAvatarUrl,
-                    discordMessage.getContentRaw(), discordMessage.getEmbeds().stream().findFirst().orElse(null));
+                    discordMessage.getContent(), discordMessage.getEmbeds().stream().findFirst().orElse(null));
         } else {
             DiscordUtil.queueMessage(textChannel, discordMessage, true);
         }
@@ -2053,8 +2045,8 @@ public class DiscordSRV extends JavaPlugin {
     }
 
     @CheckReturnValue
-    public static Message translateMessage(MessageFormat messageFormat, BiFunction<String, Boolean, String> translator) {
-        MessageBuilder messageBuilder = new MessageBuilder();
+    public static MessageCreateData translateMessage(MessageFormat messageFormat, BiFunction<String, Boolean, String> translator) {
+        MessageCreateBuilder messageBuilder = new MessageCreateBuilder();
         Optional.ofNullable(messageFormat.getContent()).map(content -> translator.apply(content, true))
                 .filter(StringUtils::isNotBlank).ifPresent(messageBuilder::setContent);
 
@@ -2107,7 +2099,7 @@ public class DiscordSRV extends JavaPlugin {
         }
     }
     public static String getAvatarUrl(Player player) {
-        String avatarUrl = constructAvatarUrl(player.getName(), player.getUniqueId(), NMSUtil.getTexture(player));
+        String avatarUrl = constructAvatarUrl(player.getName(), player.getUniqueId(), PlayerUtil.getTexture(player));
         avatarUrl = PlaceholderUtil.replacePlaceholdersToDiscord(avatarUrl, player);
         return avatarUrl;
     }
@@ -2129,7 +2121,7 @@ public class DiscordSRV extends JavaPlugin {
         }
         if (StringUtils.isBlank(texture) && player != null && player.isOnline()) {
             // grab texture placeholder from player if online
-            texture = NMSUtil.getTexture(player.getPlayer());
+            texture = PlayerUtil.getTexture(player.getPlayer());
         }
 
         String avatarUrl = DiscordSRV.config().getString("AvatarUrl");
@@ -2175,9 +2167,9 @@ public class DiscordSRV extends JavaPlugin {
         return avatarUrl;
     }
 
-    public static int getLength(Message message) {
+    public static int getLength(MessageCreateData message) {
         StringBuilder content = new StringBuilder();
-        content.append(message.getContentRaw());
+        content.append(message.getContent());
 
         message.getEmbeds().stream().findFirst().ifPresent(embed -> {
             if (embed.getTitle() != null) {
