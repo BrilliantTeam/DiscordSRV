@@ -73,11 +73,20 @@ public class DiscordFormatUtil {
     private static final class ChannelInfo {
         private final String prefix;
         private final String name;
+        private final String guildId;
 
-        private ChannelInfo(String prefix, String name) {
+        private ChannelInfo(String prefix, String name, String guildId) {
             this.prefix = prefix;
             this.name = name;
+            this.guildId = guildId;
         }
+    }
+
+    private static final Pattern CHANNEL_MENTION = Pattern.compile("<#(\\d+)>");
+
+    public static String channelUrl(String id) {
+        ChannelInfo channel = resolveChannel(id);
+        return channel != null && channel.guildId != null ? "https://discord.com/channels/" + channel.guildId + "/" + id : null;
     }
 
     private static final Cache<String, Optional<ChannelInfo>> CHANNELS = CacheBuilder.newBuilder()
@@ -102,11 +111,16 @@ public class DiscordFormatUtil {
 
     public static final Pattern MINECRAFT_CHAT_SYNTAX = Pattern.compile(String.join("|",
             DISCORD_MASKED_LINK.pattern(), CHANNEL_LINK.pattern(), GUILD_NAVIGATION.pattern(),
-            SLASH_COMMAND_MENTION.pattern(), TIMESTAMP.pattern(), SUPPRESSED_EMBED_LINK.pattern()));
+            SLASH_COMMAND_MENTION.pattern(), TIMESTAMP.pattern(), SUPPRESSED_EMBED_LINK.pattern(), CHANNEL_MENTION.pattern()));
 
     public static String[] renderSyntax(String syntax) {
         Matcher matcher = DISCORD_MASKED_LINK.matcher(syntax);
         if (matcher.matches()) return new String[] {matcher.group(1), matcher.group(2)};
+        matcher = CHANNEL_MENTION.matcher(syntax);
+        if (matcher.matches()) {
+            ChannelInfo channel = resolveChannel(matcher.group(1));
+            return channel != null ? new String[] {channel.prefix + channel.name, channelUrl(matcher.group(1))} : new String[] {syntax, null};
+        }
         matcher = CHANNEL_LINK.matcher(syntax);
         if (matcher.matches()) {
             ChannelInfo channel = resolveChannel(matcher.group(1));
@@ -166,7 +180,7 @@ public class DiscordFormatUtil {
                 String name = json.getString("name", null);
                 if (name == null) return null;
                 ChannelType type = ChannelType.fromId(json.getInt("type", -1));
-                return new ChannelInfo(type.isThread() ? threadPrefix(jda.getGuildChannelById(json.getString("parent_id", "0"))) : channelPrefix(type), name);
+                return new ChannelInfo(type.isThread() ? threadPrefix(jda.getGuildChannelById(json.getString("parent_id", "0"))) : channelPrefix(type), name, json.getString("guild_id", null));
             }).submit().get(3, TimeUnit.SECONDS));
         } catch (Exception e) {
             channel = Optional.empty();
@@ -183,7 +197,7 @@ public class DiscordFormatUtil {
         } catch (NumberFormatException ignored) {}
         if (channel != null) {
             String prefix = channel instanceof ThreadChannel ? threadPrefix(((ThreadChannel) channel).getParentChannel()) : channelPrefix(channel.getType());
-            return new ChannelInfo(prefix, channel.getName());
+            return new ChannelInfo(prefix, channel.getName(), channel.getGuild().getId());
         }
         Optional<ChannelInfo> info = CHANNELS.getIfPresent(id);
         return info != null ? info.orElse(null) : null;

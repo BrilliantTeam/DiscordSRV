@@ -1345,7 +1345,7 @@ public class DiscordSRV extends JavaPlugin {
             try {
                 groupSynchronizationManager.resync(GroupSynchronizationManager.SyncDirection.AUTHORITATIVE, GroupSynchronizationManager.SyncCause.TIMER);
             } catch (Exception e) {
-                error("Failed to resync\n" + ExceptionUtils.getMessage(e));
+                if (!shuttingDown) error("Failed to resync\n" + ExceptionUtils.getMessage(e));
             }
             Bukkit.getPluginManager().registerEvents(groupSynchronizationManager, this);
             SchedulerUtil.runTaskTimerAsynchronously(this,

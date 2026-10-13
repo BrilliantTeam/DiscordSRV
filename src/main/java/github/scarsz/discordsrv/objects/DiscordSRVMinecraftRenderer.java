@@ -43,6 +43,8 @@ public class DiscordSRVMinecraftRenderer extends DefaultMinecraftRenderer {
 
     @Override
     public @Nullable Component appendChannelMention(@NonNull Component component, @NonNull String id) {
+        String url = DiscordFormatUtil.channelUrl(id);
+        if (url != null) return component.append(Component.text(url));
         String name = DiscordFormatUtil.resolveChannelName(id);
         if (name != null) component = component.append(Component.text("#" + name));
         return component;

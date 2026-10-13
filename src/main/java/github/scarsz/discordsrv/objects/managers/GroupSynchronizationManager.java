@@ -149,7 +149,7 @@ public class GroupSynchronizationManager extends ListenerAdapter implements List
     }
 
     public void resync(OfflinePlayer player, SyncDirection direction, boolean addLinkedRole, SyncCause cause) {
-        if (player == null) return;
+        if (player == null || DiscordSRV.shuttingDown) return;
         if (getPermissions() == null) {
             DiscordSRV.debug(Debug.GROUP_SYNC, "Can't synchronize groups/roles for " + player.getName() + ", permissions provider is null");
             return;
@@ -232,6 +232,7 @@ public class GroupSynchronizationManager extends ListenerAdapter implements List
                     synchronizationSummary.add("Tried to sync role " + role + " but the user wasn't a member in the guild the role is in (Discord response)");
                     continue;
                 }
+                if (DiscordSRV.shuttingDown) return;
                 DiscordSRV.error(e);
                 continue;
             }
