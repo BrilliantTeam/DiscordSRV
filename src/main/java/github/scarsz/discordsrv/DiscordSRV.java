@@ -900,7 +900,7 @@ public class DiscordSRV extends JavaPlugin {
             jda.awaitReady(); // let JDA be assigned as soon as we can, but wait until it's ready
 
             for (Guild guild : jda.getGuilds()) {
-                guild.retrieveOwner().queue();
+                guild.retrieveOwner().useCache(false).queue();
                 guild.loadMembers()
                         .onSuccess(members -> DiscordSRV.debug("Loaded " + members.size() + " members in guild " + guild))
                         .onError(throwable -> DiscordSRV.error("Failed to retrieve members of guild " + guild, throwable))
