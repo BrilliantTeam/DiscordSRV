@@ -54,6 +54,7 @@ Experiment_WebhookChatMessageUsernameFilters: {}
 
 # 嵌入和 webhook 图像/头像 url 格式
 # 留空以使用默认值
+# 必须是格式正确的 https:// 或 http:// 网址
 # 可用占位符: {texture} {username} {uuid} {uuid-nodashes} {size}
 AvatarUrl: ""
 

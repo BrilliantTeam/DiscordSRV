@@ -45,6 +45,7 @@ import org.jetbrains.annotations.ApiStatus;
 
 import java.io.File;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -536,6 +537,7 @@ public class DiscordUtil {
      * @param channel The channel to set the topic of
      * @param topic The new topic to be set
      */
+    private static final Set<String> topicFailedChannels = ConcurrentHashMap.newKeySet();
     public static void setTextChannelTopic(TextChannel channel, String topic) {
         if (channel == null) {
             DiscordSRV.debug("Attempted to set status of null channel");
@@ -544,7 +546,9 @@ public class DiscordUtil {
 
         try {
             channel.getManager().setTopic(topic).queue();
+            topicFailedChannels.remove(channel.getId());
         } catch (Exception e) {
+            if (!topicFailedChannels.add(channel.getId())) return;
             if (e instanceof PermissionException) {
                 PermissionException pe = (PermissionException) e;
                 if (pe.getPermission() != Permission.UNKNOWN) {

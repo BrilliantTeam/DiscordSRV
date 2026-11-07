@@ -35,6 +35,7 @@ import net.dv8tion.jda.api.exceptions.ErrorHandler;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.ErrorResponse;
 import net.dv8tion.jda.api.requests.RestAction;
+import org.apache.commons.lang3.StringUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 
@@ -59,7 +60,7 @@ public class DiscordAccountLinkListener extends ListenerAdapter {
         if (!DiscordSRV.config().getBoolean("MinecraftDiscordAccountLinkedUsePM")) return;
 
         String reply = DiscordSRV.getPlugin().getAccountLinkManager().process(event.getMessage().getContentRaw(), event.getAuthor().getId());
-        if (reply != null) event.getMessage().reply(reply).queue();
+        if (StringUtils.isNotEmpty(reply)) event.getMessage().reply(reply).queue();
     }
 
     private final ErrorHandler ignoreFailedToDeleteMessage = new ErrorHandler()
@@ -76,7 +77,7 @@ public class DiscordAccountLinkListener extends ListenerAdapter {
 
         Message receivedMessage = event.getMessage();
         String reply = DiscordSRV.getPlugin().getAccountLinkManager().process(receivedMessage.getContentRaw(), event.getAuthor().getId());
-        if (reply != null) {
+        if (StringUtils.isNotEmpty(reply)) {
             int deleteSeconds = DiscordSRV.config().getIntElse("MinecraftDiscordAccountLinkedMessageDeleteSeconds", 0);
             RestAction<Message> repliedMessage = receivedMessage.reply(reply).delay(deleteSeconds, TimeUnit.SECONDS);
 

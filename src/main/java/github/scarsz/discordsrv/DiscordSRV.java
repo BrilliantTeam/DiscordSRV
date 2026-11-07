@@ -497,10 +497,6 @@ public class DiscordSRV extends JavaPlugin {
             getLogger().severe("DiscordSRV failed to load properly: " + e.getMessage() + ". See " + github.scarsz.discordsrv.util.DebugUtil.run("DiscordSRV") + " for more information. Can't figure it out? Go to https://discordsrv.com/discord for help");
         });
         initThread.start();
-
-        if (Bukkit.getWorlds().size() > 0) {
-            playerDataFolder = new File(Bukkit.getWorlds().get(0).getWorldFolder().getAbsolutePath(), "/playerdata");
-        }
     }
 
     public void disablePlugin() {
@@ -2132,6 +2128,14 @@ public class DiscordSRV extends JavaPlugin {
             avatarUrl = !offline ? defaultUrl : offlineUrl;
         }
 
+        if (!EmbedBuilder.URL_PATTERN.matcher(avatarUrl).matches()) {
+            avatarUrl = !offline ? defaultUrl : offlineUrl;
+            DiscordSRV.config().setRuntimeValue("AvatarUrl", avatarUrl);
+
+            DiscordSRV.warning("Your AvatarUrl config option is not a valid http(s) URL.");
+            DiscordSRV.warning("You should set your AvatarUrl (in config.yml) to a valid http(s) URL or an empty string (\"\") to get rid of this warning.");
+        }
+
         if (avatarUrl.contains("://crafatar.com/")) {
             avatarUrl = !offline ? defaultUrl : offlineUrl;
             DiscordSRV.config().setRuntimeValue("AvatarUrl", avatarUrl);
@@ -2235,11 +2239,15 @@ public class DiscordSRV extends JavaPlugin {
         return responses;
     }
 
-    private static File playerDataFolder = null;
     public static int getTotalPlayerCount() {
-        if (playerDataFolder == null) return 0;
-        File[] playerFiles = playerDataFolder.listFiles(f -> f.getName().endsWith(".dat"));
-        return playerFiles != null ? playerFiles.length : 0;
+        if (Bukkit.getWorlds().isEmpty()) return 0;
+        File worldFolder = Bukkit.getWorlds().get(0).getWorldFolder();
+
+        File playerDataFolder = new File(worldFolder, "playerdata");
+        if (!playerDataFolder.exists()) playerDataFolder = new File(worldFolder, "../../../players/data");
+
+        File[] files = playerDataFolder.listFiles(f -> f.getName().endsWith(".dat"));
+        return files != null ? files.length : 0;
     }
 
     /**
