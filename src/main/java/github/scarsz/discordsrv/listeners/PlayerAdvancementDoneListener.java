@@ -56,7 +56,10 @@ public class PlayerAdvancementDoneListener implements Listener {
         // return if advancement or player objects are knackered because this can apparently happen for some reason
         if (event.getAdvancement() == null || player == null) return;
 
-        if (event.message() == null) return;
+        try {
+            if (event.getClass().getMethod("message").invoke(event) == null) return;
+        } catch (ReflectiveOperationException ignored) {
+        }
 
         // respect invisibility plugins
         if (PlayerUtil.isVanished(player)) return;
